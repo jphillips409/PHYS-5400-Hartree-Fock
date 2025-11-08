@@ -42,30 +42,31 @@ plt.rcParams['lines.linewidth'] = 2
 #Defining constants for this problem
 #H for checking calculation
 #Z = 1 # Number of protons
-#Ratm = 25 # angstrom
+#Ratm = 10 # angstrom
 #screen = 0 # Electron screening parameter, 0 for hydrogen
 
 #He
 #Z = 2 # Number of protons
-#Ratm = 25 # Bohr radii
+#Ratm = 10 # Bohr radii
 #screen = 4.05#2.97 # Electron screening parameter, tuned for He
-#screen = 0#1.2
+#screen = 1#1.2
 
 #Be
 #Z = 4
-#Ratm = 25
+#Ratm = 10
 #screen = 0
 
 #Ne
-Z = 10
-Ratm = 10 # angstrom
+#Z = 10
+#Ratm = 10 # angstrom
 #screen = 4.385
-screen = 0
+#screen = 0
 
 #Ar
-#Z = 18
-#Ratm = 7 # angstrom
+Z = 18
+Ratm = 15 # angstrom
 #screen = 3.977
+screen = 0
 
 CoulConst = 1 # N^2*m^2/C^2
 
@@ -305,7 +306,7 @@ def Auxiliary(Z,lorbit,screenparameter,plotb):
     if plotb == True: plt.savefig('auxradialprob.pdf')
     if plotb == True: plt.show()
     #print('First Aux radial functions at end of Aux: ', Rfunc[0])
-    return Earr, larr, narr, BoundVectors
+    return Earr, larr, narr, BoundVectors, potvaltot
 
 # Direct component.
 # Accepts radial, reduced wave function, and orbital angular momentum arrays.
@@ -399,19 +400,24 @@ def main(Z,lorbit,screenparameter,plotb):
     auxl = []
     auxn = []
     auxstates = []
+    potentials = []
     for i in range(0,lmax+1):
         lorbit = i
-        tE, tl, tn, tstates = Auxiliary(Z,lorbit,screenparameter,plotb)
+        tE, tl, tn, tstates, tpot = Auxiliary(Z,lorbit,screenparameter,plotb)
         auxE.extend(tE)
         auxl.extend(tl)
         auxn.extend(tn)
         for sub in tstates:
             auxstates.append(sub)
+        for j in range(len(tn)):
+            potentials.append(tpot)
 
     # Probably very inefficient but I'm not very familiar with numpy
     auxstates = np.array(auxstates)
     auxstates = np.squeeze(auxstates)
     #print('auxstates ', auxstates)
+    potentials = np.array(potentials)
+    potentials = np.squeeze(potentials)
     lookupl = ['s', 'p', 'd', 'f', 'g', 'h', 'i', 'j']
 
     #print('Auxiliary energy array: ', auxE)
@@ -443,39 +449,33 @@ def main(Z,lorbit,screenparameter,plotb):
 
     for i in range(0,lmax+1):
 
-        # Calculate external potential and centrifugal matrix
-        potvaltot = np.zeros(riter)
-
-        # fills radius and potential value arrays
-        for j in range(riter):
-            potvaltot[j] = PotTot(r[j], Z, i, me)
-
         # Calculate tridiagonal kinetic energy matrix
         tHamil = np.zeros((riter, riter))
         tHamil[0, 1] = KEconst(me) * (1/ ((rstep**2)))
-        if i % 2 == 0: tHamil[0, 0] = KEconst(me) * (-3.0 /((rstep**2))) + potvaltot[0]  # Different values if l even or odd
-        if i % 2 != 0: tHamil[0, 0] = KEconst(me) * (-1.0/((rstep**2))) + potvaltot[0]
+        if i % 2 == 0: tHamil[0, 0] = KEconst(me) * (-3.0 /((rstep**2))) # Different values if l even or odd
+        if i % 2 != 0: tHamil[0, 0] = KEconst(me) * (-1.0/((rstep**2)))
 
         # Fills rest of tridiagonal
         for j in range(1, riter - 1):
             tHamil[j, j - 1] = KEconst(me) * (1/((rstep**2)))
-            tHamil[j, j] = KEconst(me) * (-2.0/((rstep**2))) + potvaltot[j]
+            tHamil[j, j] = KEconst(me) * (-2.0/((rstep**2)))
             tHamil[j, j + 1] = KEconst(me) * (1/((rstep**2)))
 
         tHamil[riter - 1, riter - 2] = KEconst(me) * (1/((rstep**2)))
-        tHamil[riter - 1, riter - 1] = KEconst(me) * (-2.0/((rstep**2))) + potvaltot[riter - 1]
+        tHamil[riter - 1, riter - 1] = KEconst(me) * (-2.0/((rstep**2)))
 
         Hamil[i] = tHamil
 
     # Counter for recursive loop
     counter = 0
-    maxcount = 5 # set some max number of iterations
+    maxcount = 10 # set some max number of iterations
 
     # Temp arrays
     TE = []
     Tl = []
     Tn = []
     Tstates = []
+    Tpots = []
 
     # Make arrays that will hold each set of values
     # Multidimensional, each hold an object which contains every array
@@ -483,6 +483,8 @@ def main(Z,lorbit,screenparameter,plotb):
     HFl = np.empty(maxcount+1,dtype=object)
     HFn = np.empty(maxcount+1,dtype=object)
     HFstates = np.empty(maxcount+1,dtype=object)
+    HFpots = np.empty(maxcount+1,dtype=object)
+
 
     # Set first value equal to auxiliary arrays
     # Only use the occupied states! This is very important!
@@ -495,6 +497,7 @@ def main(Z,lorbit,screenparameter,plotb):
                 Tl.append(auxl[i])
                 Tn.append(auxn[i])
                 Tstates.append(auxstates[i])
+                Tpots.append(potentials[i])
             else: continue
 
         # Only 1s occupied
@@ -504,6 +507,7 @@ def main(Z,lorbit,screenparameter,plotb):
                 Tl.append(auxl[i])
                 Tn.append(auxn[i])
                 Tstates.append(auxstates[i])
+                Tpots.append(potentials[i])
             else: continue
 
             # Only 1s and 2s occupied
@@ -514,6 +518,7 @@ def main(Z,lorbit,screenparameter,plotb):
                 Tl.append(auxl[i])
                 Tn.append(auxn[i])
                 Tstates.append(auxstates[i])
+                Tpots.append(potentials[i])
 
 
         # Only 1s, 2s, and 2p occupied
@@ -525,6 +530,7 @@ def main(Z,lorbit,screenparameter,plotb):
                 Tl.append(auxl[i])
                 Tn.append(auxn[i])
                 Tstates.append(auxstates[i])
+                Tpots.append(potentials[i])
 
         # Only 1s, 2s, 2p, 3s, 3p are occupied
         if Z == 18:
@@ -535,6 +541,7 @@ def main(Z,lorbit,screenparameter,plotb):
                 Tl.append(auxl[i])
                 Tn.append(auxn[i])
                 Tstates.append(auxstates[i])
+                Tpots.append(potentials[i])
 
     HFE[0] = TE
     HFl[0] = Tl
@@ -542,11 +549,35 @@ def main(Z,lorbit,screenparameter,plotb):
     Tstates = np.array(Tstates)
     #Tstates = np.squeeze(Tstates) # Not sure if I need this
     HFstates[0] = Tstates
+    Tpots = np.array(Tpots)
+    HFpots[0] = Tpots
+
+    # Reorder arrays to follow n,l scheme. Only for Z > 10
+    # Manually do it for argon
+    if Z == 18:
+        rindx = np.array([0,1,3,2,4])
+        temp = HFE[0]
+        temp = np.array(temp)
+        HFE[0] = temp[rindx]
+        temp = HFn[0]
+        temp = np.array(temp)
+        HFn[0] = temp[rindx]
+        temp = HFl[0]
+        temp = np.array(temp)
+        HFl[0] = temp[rindx]
+        temp = HFstates[0]
+        temp = np.array(temp)
+        HFstates[0] = temp[rindx]
+        temp = HFpots[0]
+        temp = np.array(temp)
+        HFpots[0] = temp[rindx]
 
     print('HF Input Values')
     print(HFE[0])
     print(HFl[0])
     print(HFn[0])
+    #print(HFpots[0])
+
     #print('First input wave function for HF: ',HFstates[0])
 
     # need to access the n for the calculation
@@ -564,6 +595,7 @@ def main(Z,lorbit,screenparameter,plotb):
         lvalues = HFl[counter]
         nvalues = HFn[counter]
         states = HFstates[counter]
+        pots = HFpots[counter]
 
         print('input states: ', states)
 
@@ -574,6 +606,7 @@ def main(Z,lorbit,screenparameter,plotb):
         tempE = []
         tempn = []
         templ = []
+        temppots = []
 
         for n in range(1,maxn+1):
 
@@ -583,22 +616,38 @@ def main(Z,lorbit,screenparameter,plotb):
 
             for i in range(0,maxl+1):
 
+                # Select potential based on n,l
+                potindx = 0
+                for j in range(len(nvalues)):
+                    if nvalues[j] == n and lvalues[j] == i: potindx = j
+
+                prvpot = pots[potindx]
+                potvaltot = np.zeros(riter)
+                # fills radius and potential value arrays
+                for j in range(riter):
+                    potvaltot[j] = PotTot(r[j], Z, i, me)
+
                 # Calculate the direct and exchange terms, n, l dependent for modified hartree
                 Dpot = Direct(r, lvalues, nvalues, states, n, i)
                 #Epot = Exchange(r, lvalues, states, i)
 
-                for j in range(riter):
-                    potvaltot[j] = PotTot(r[j], Z, i, me)
+                potvaltot = potvaltot + Dpot
+
+                # Mix with counter - 1 potential, give mixing parameter
+                mix = 0.5
+                avgpot = (1 - mix)*prvpot + (mix)*potvaltot
+                print(avgpot)
                 # Plot the Hartree potential
-                plt.plot(r, potvaltot)
-                plt.plot(r, Dpot)
-                plt.plot(r, Dpot + potvaltot)
+                plt.plot(r, potvaltot,label='New Potential')
+                plt.plot(r, Dpot,label='Direct Potential')
+                plt.plot(r, avgpot,label='Averaged Potential')
                 plt.xlim(0, 10)
                 plt.ylim(-30, 30)
 
                 plt.xlabel('Radius ($a_{0}$)')
                 plt.ylabel('Potential Energy (Hartree)')
                 plt.axhline(0, color='black')
+                plt.legend()
                 plt.show()
 
                 # Access the correct kinetic and external Hamiltonian using the l value
@@ -610,7 +659,7 @@ def main(Z,lorbit,screenparameter,plotb):
                 for j in range(0, riter):
                     for m in range(0, riter):
                         if j == m:
-                            HFHamil[j, m] += Dpot[j]
+                            HFHamil[j, m] += avgpot[j]
                             #print(Dpot[j])
                         #HFHamil[j,n] -= Epot[j,n]
 
@@ -690,11 +739,13 @@ def main(Z,lorbit,screenparameter,plotb):
                     HFstates[counter] = np.array([Radfunc])
                     HFl[counter] = [i]
                     HFn[counter] = [n]
+                    HFpots[counter] = np.array([avgpot])
 
                     print('Iteration ', counter)
                     print('States: E ', HFE[counter])
                     print('States: l ', HFl[counter])
                     print('States: n ', HFn[counter])
+                    print('Pots: ', HFpots[counter])
                     #print('Radial funcs: ', HFstates[counter])
 
                 # Only save the valence orbitals as radial wavefunctions
@@ -703,6 +754,7 @@ def main(Z,lorbit,screenparameter,plotb):
                     tempE.append(boundvals[n-1])
                     templ.append(i)
                     tempn.append(n)
+                    temppots.append(avgpot)
 
                     #print('Iteration ', counter)
                     #print('States: E ', HFE[counter])
@@ -710,19 +762,16 @@ def main(Z,lorbit,screenparameter,plotb):
                     #print('States: n ', HFn[counter])
                     #print('Radial funcs: ', HFstates[counter])
 
-                if Z == 10:
+                if Z == 10 or Z == 18:
                     # Save s-wave
                     if i == 0:
                         #tempstates.append(boundvec[n - 1])
                         #tempE.append(boundvals[n - 1])
-                        if n == 0:
-                            tempstates.append(states[0])
-                            tempE.append(energies[0])
-                        else:
-                            tempstates.append(boundvec[n - 1])
-                            tempE.append(boundvals[n - 1])
+                        tempstates.append(boundvec[n - 1])
+                        tempE.append(boundvals[n - 1])
                         templ.append(i)
                         tempn.append(n)
+                        temppots.append(avgpot)
 
                         print('Temp Stuff')
                         print('states: ', tempstates)
@@ -737,6 +786,7 @@ def main(Z,lorbit,screenparameter,plotb):
                         #tempE.append(energies[2])
                         templ.append(i)
                         tempn.append(n)
+                        temppots.append(avgpot)
 
                         print('Temp Stuff')
                         print('states: ', tempstates)
@@ -748,15 +798,20 @@ def main(Z,lorbit,screenparameter,plotb):
             tempstates = np.array(tempstates)
             tempstates = np.squeeze(tempstates)
 
+            temppots = np.array(temppots)
+            temppots = np.squeeze(temppots)
+
             HFE[counter] = tempE
             HFstates[counter] = tempstates
             HFl[counter] = templ
             HFn[counter] = tempn
+            HFpots[counter] = temppots
 
             print('Iteration ', counter)
             print('States: E ', HFE[counter])
             print('States: l ', HFl[counter])
             print('States: n ', HFn[counter])
+            print('Pots ', HFpots[counter])
             # print('Radial funcs: ', HFstates[counter])
 
     print('Final Arrays')
@@ -765,6 +820,8 @@ def main(Z,lorbit,screenparameter,plotb):
     c = 0
     energylist2s = []
     energylist2p = []
+    energylist3s = []
+    energylist3p = []
 
 
     for inner in HFE:
@@ -773,44 +830,61 @@ def main(Z,lorbit,screenparameter,plotb):
         if maxn == 2:
             energylist2s.append(inner[1])
             if Z > 4: energylist2p.append(inner[2])
+        if maxn == 3 and Z == 18:
+            energylist2s.append(inner[1])
+            energylist2p.append(inner[2])
+            energylist3s.append(inner[3])
+            energylist3p.append(inner[4])
         count.append(c)
         c+=1
+    energylist = np.array(energylist)
+    energylist2s = np.array(energylist2s)
+    energylist2p = np.array(energylist2p)
+    energylist3s = np.array(energylist3s)
+    energylist3p = np.array(energylist3p)
 
 
-    plt.plot(count, energylist)
+    if maxn == 1: plt.plot(count, energylist,label = '1s')
     if maxn == 2:
-        plt.plot(count, energylist2s)
-        if Z > 4: plt.plot(count, energylist2p)
+        plt.plot(count, energylist2s,label = '2s')
+        if Z > 4: plt.plot(count, energylist2p,label = '2p')
+    if maxn == 3 and Z == 18:
+        plt.plot(count, energylist/10,label = '1s x0.1')
+        plt.plot(count, energylist2s,label = '2s')
+        plt.plot(count, energylist2p,label = '2p')
+        plt.plot(count, energylist3s,label = '3s')
+        plt.plot(count, energylist3p,label = '3p')
+
     plt.xlabel('Iteration')
     plt.ylabel('Energy (Hartree)')
     plt.axhline(0, color='black')
+    plt.legend()
     plt.show()
 
     # Plot the starting states and the final states
     statecount = 0
+    valstate = []
+    collist = ['b','g','r','c','m','y','k']
     for inner in HFstates:
         if statecount == 0 or statecount == len(HFstates) - 1:
             for i in range(len(inner)):
-                # pick a phase
-                # 1s positive
-                # 2s positive
-                # 2p negative
-                if i == 0:
-                    if statecount == 0: plt.plot(r,np.abs(inner[i]), linestyle='dashed')
-                    if statecount == len(HFstates) - 1: plt.plot(r,np.abs(inner[i]))
-                if i == 1:
-                    if statecount == 0: plt.plot(r,-inner[i], linestyle='dashed')
-                    if statecount == len(HFstates) - 1: plt.plot(r,-inner[i])
-                if i == 2:
-                    if statecount == 0: plt.plot(r,inner[i], linestyle='dashed')
-                    if statecount == len(HFstates) - 1: plt.plot(r,-inner[i])
+                if statecount == 0:
+                    slabel = str(HFn[0][i]) + lookupl[HFl[0][i]]
+                    plt.plot(r,inner[i], linestyle='dashed',color=collist[i],label=slabel)
+                    valstate.append(inner[i,3])
+                if statecount == len(HFstates) - 1:
+                    flip = 1
+                    if (inner[i,3]/valstate[i]) < 0: flip = -1
+                    plt.plot(r, flip*inner[i],color=collist[i])
+
         statecount +=1
 
     plt.xlabel('Radius $a_{0}$')
     plt.ylabel('rR(r)')
     plt.axhline(0, color='black')
     plt.xlim(0, 1)
-    plt.ylim(-2, 3)
+    plt.ylim(-3.5, 3.5)
+    plt.legend()
     plt.show()
 
 main(Z, 0, screen, True)
