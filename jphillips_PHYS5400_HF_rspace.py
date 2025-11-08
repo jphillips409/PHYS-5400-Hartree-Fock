@@ -47,15 +47,15 @@ plt.rcParams['lines.linewidth'] = 2
 
 #He
 Z = 2 # Number of protons
+#Ratm = 10 # Angstrom
 Ratm = 25 # Bohr radii
 #screen = 4.05#2.97 # Electron screening parameter, tuned for He
-screen = 0#1.2
+screen = 1.2
 
 #Ne
 #Z = 10
 #Ratm = 25 # angstrom
 #screen = 4.385
-#screen = 0
 
 #Ar
 #Z = 18
@@ -70,8 +70,7 @@ me = 1  # electron mass in keV/c^2
 #Starting parameters
 rstart = 0.00000001 # Bohr radii
 rstop = Ratm # Bohr radii
-riter = 2000 # Number of steps. 2000 for He
-#riter = 3000 # 3k for Ne
+riter = 2000 # Number of steps within 1 angstrom
 lorbit = 0 #orbital angular momentum
 
 #Gives the constant for the kinetic energy
@@ -179,18 +178,17 @@ def Auxiliary(Z,lorbit,screenparameter,plotb):
 
     Hamil[riter - 1, riter - 2] = KEconst(me) * (1.0 / (rstep ** 2))
     Hamil[riter - 1, riter - 1] = KEconst(me) * (-2.0 / (rstep ** 2)) + potvaltot[riter - 1]
-
+    print('Aux Hamil')
+    #print(Hamil)
     # Solves for the eigenvalues and eigenstates of the Woods-Saxon Hamiltonian
     EigValues, EigVectors = np.linalg.eig(Hamil)
+
+   # print('needed value:')
+    #print(1/sum)
 
     for i in range(0,riter):
         normalization_const = np.sqrt(np.trapz(EigVectors.T[i]**2, r))
         EigVectors[:,i] = EigVectors.T[i] / normalization_const
-
-    # These are unsorted so they need to be sorted by energy
-    permute = EigValues.argsort()
-    EigValues = EigValues[permute]
-    EigVectors = EigVectors[:, permute]
 
     # Check normalization for i = 0
     sum = 0
@@ -198,6 +196,11 @@ def Auxiliary(Z,lorbit,screenparameter,plotb):
     for i in range(riter):
         sum += rstep*vector[i]*vector[i]
     print('Vector sum u**2: ', sum)
+
+    # These are unsorted so they need to be sorted by energy
+    permute = EigValues.argsort()
+    EigValues = EigValues[permute]
+    EigVectors = EigVectors[:, permute]
 
     # Prints out the negative eigenvalues and counts them
     boundEig = 0
@@ -243,9 +246,8 @@ def Auxiliary(Z,lorbit,screenparameter,plotb):
     #print('First Auxiliary radial functions: ', Rfunc[0])
     # Plot radial function
     plt.axhline(0, color='black', label='_nolegend_')
-    plt.xlabel('Radius (a$_{0}$)')
+    plt.xlabel('Radius ($\AA$)')
     plt.ylabel('rR(r)')
-    plt.xlim(0,10)
 
     for i in range(0, wavecount):
         if lorbit == 0: Rlabel = str(i+1) + 's'
@@ -274,7 +276,7 @@ def Auxiliary(Z,lorbit,screenparameter,plotb):
 
     # Plots each radial distribution function squared
     plt.axhline(0, color='black', label='_nolegend_')
-    plt.xlabel('Radius (a$_{0}$)')
+    plt.xlabel('Radius ($\AA$)')
     plt.ylabel('|rR(r)|$^2$')
 
     for i in range(0, wavecount):
@@ -305,12 +307,7 @@ def Auxiliary(Z,lorbit,screenparameter,plotb):
 # Direct component.
 # Accepts radial, reduced wave function, and orbital angular momentum arrays.
 # The wave array is a 2D array that holds each wave function
-# Needs the quantum number and correct l to access the right wave function in modified hartree
-def Direct(radarr,larr,narr, wavearr, n, l):
-
-    # Switch for modified
-    modified = False
-    print('Calc for n = ', n, ' and l = ',l)
+def Direct(radarr,larr,wavearr):
     print('Direct wave')
     print(wavearr)
     directpot = np.zeros(len(radarr))
@@ -322,12 +319,8 @@ def Direct(radarr,larr,narr, wavearr, n, l):
         for j in range(0,len(wavearr)):
             wavepicked = wavearr[j]
             lpicked = larr[j]
-            npicked = narr[j]
-            density = 2*(2*lpicked + 1) * wavepicked[i]*wavepicked[i]
-            if modified == True:
-                if l == 0: density = (0.5)*density # s-wave
-                if l == 1: density = (5/6)*density # p-wave
-            ndirect[i] += density
+            ndirect[i] += 2*(2*lpicked + 1) * wavepicked[i]*wavepicked[i]
+            ndirect[i] = (0.5)*ndirect[i] # For modified s-wave hartree
 
         integrand[i] = ndirect[i] # Don't need to multiply by r^2 because I'm using the reduced
     # Calculate the integrand for each radial point. Only need to be done once
@@ -347,39 +340,62 @@ def Direct(radarr,larr,narr, wavearr, n, l):
 
 # Exchange component
 # Need to do this for each occupied wave function
-# Based on eq. 10.96 in the book, but in r-space
-# Need to provide the l for the HF matrix
-def Exchange(radarr,larr,wavearr,lHF):
+def Exchange(radarr,uarr,larr,wavearr):
 
-    # Form a matrix of r x r
-    epot = np.zeros((len(radarr),len(radarr)))
+    # Form a matrix of u x u
+    epot = np.zeros((len(uarr),len(uarr)))
 
-    # Iterate over r
-    for i in range(0,len(radarr)):
+    # Iterate over u
+    for i in range(0,len(uarr)):
 
-        # Iterate over r'
-        for j in range(0,len(radarr)):
-            matrixel = 0
+        # Iterate over uprime
+        # Should I iterate over every uprime?
+        for j in range(0,1):
 
-            # Iterate over the wave functions n' l'
-            for w in range(len(wavearr)):
-                wavepicked = wavearr[w]
-                lpicked = larr[w]
+            # Iterate over the wave functions
+            for m in range(len(wavearr)):
+                wavepicked = wavearr[m]
+                lpicked = larr[m]
 
-                # Find the smallest and largest L (coupled l), iterate to this
-                lmin = abs(lpicked - lHF)
-                lmax = abs(lpicked + lHF)
+                # Iterate over the wave functions again
+                for n in range(len(wavearr)):
+                    waveprime = wavearr[n]
+                    lprime = larr[n]
 
-                # Iterate over L
-                for lcoup in range(lmin,lmax+1):
+                    # Calculate the total angular mom
+                    lcoup = lpicked + lprime
 
-                    # Calculate 3J
-                    C = ThreeJ(lHF, lpicked, lcoup)
-                    if C == 0:
-                        # Do not contribute to term if 0
-                        continue
+                    # Iterate over the coupled l
+                    for L in range(0,lcoup+1):
 
-                    epot[i,j] += wavepicked[i]*(radarr[i]**(1/2))*((min(radarr[i],radarr[j])**lcoup)/(max(radarr[i],radarr[j])**(lcoup+1)))*C*(radarr[j]**(1/2))*wavepicked[j]
+                        # Calculate 3J
+                        C = ThreeJ(lpicked,lprime,L)
+                        if C == 0:
+                            # Do not contribute to term if 0
+                            continue
+
+                        # Form the max and min r arrays
+                        # Find max value array, raise to L + 1
+                        maxarr = np.zeros(len(radarr))
+                        for ii in range(0, len(radarr)):
+                            if radarr[ii] <= radarr[i]:
+                                maxarr[ii] = radarr[i]**(lcoup + 1)
+                            else:
+                                maxarr[ii] = radarr[ii]**(lcoup + 1)
+
+                        # Find min value array, raise to L
+                        minarr = np.zeros(len(radarr))
+                        for ii in range(0, len(radarr)):
+                            if radarr[ii] >= radarr[i]:
+                                minarr[ii] = radarr[i]**(lcoup + 1)**(lcoup)
+                            else:
+                                minarr[ii] = radarr[ii]**(lcoup + 1)**(lcoup)
+
+                        # Calculate first part of the contribution using np.trapz
+                        epot[i,i] += np.trapz((minarr/maxarr)*C*wavepicked*waveprime, uarr)
+
+                    # Calculate second part
+                    epot[i,i] *= waveprime[i]
 
     return epot
 
@@ -400,18 +416,18 @@ def main(Z,lorbit,screenparameter,plotb):
         auxE.extend(tE)
         auxl.extend(tl)
         auxn.extend(tn)
-        for sub in tstates:
-            auxstates.append(sub)
+        print('tstates ', tstates)
+        auxstates.append(tstates)
 
     # Probably very inefficient but I'm not very familiar with numpy
     auxstates = np.array(auxstates)
     auxstates = np.squeeze(auxstates)
-    #print('auxstates ', auxstates)
+    print('auxstates ', auxstates)
     lookupl = ['s', 'p', 'd', 'f', 'g', 'h', 'i', 'j']
 
-    #print('Auxiliary energy array: ', auxE)
-    #print('Auxiliary orb ang mom array: ', auxl)
-    #print('Auxiliary quant num array: ', auxn)
+    print('Auxiliary energy array: ', auxE)
+    print('Auxiliary orb ang mom array: ', auxl)
+    print('Auxiliary quant num array: ', auxn)
 
     ############################################################
     # Begin HF part of the calculation
@@ -461,10 +477,11 @@ def main(Z,lorbit,screenparameter,plotb):
         tHamil[riter - 1, riter - 1] = KEconst(me) * (-2.0/((rstep**2))) + potvaltot[riter - 1]
 
         Hamil[i] = tHamil
-
+        print('tHamil')
+        #print(tHamil)
     # Counter for recursive loop
     counter = 0
-    maxcount = 30 # set some max number of iterations
+    maxcount = 10 # set some max number of iterations
 
     # Temp arrays
     TE = []
@@ -498,7 +515,9 @@ def main(Z,lorbit,screenparameter,plotb):
                 TE.append(auxE[i])
                 Tl.append(auxl[i])
                 Tn.append(auxn[i])
+                #print('Helium 1s R function: ', auxstates[i])
                 Tstates.append(auxstates[i])
+               # print('Helium 1s R function * r^3/2: ', Tstates[i])
             else: continue
 
         # Only 1s, 2s, and 2p occupied
@@ -528,17 +547,10 @@ def main(Z,lorbit,screenparameter,plotb):
     #Tstates = np.squeeze(Tstates) # Not sure if I need this
     HFstates[0] = Tstates
 
-    print('HF Input Values')
-    print(HFE[0])
-    print(HFl[0])
-    print(HFn[0])
+    #(HFE[0])
+    #print(HFl[0])
+    #print(HFn[0])
     #print('First input wave function for HF: ',HFstates[0])
-
-    # need to access the n for the calculation
-    maxn = 0
-    if Z == 1 or Z == 2: maxn = 1
-    if Z == 10: maxn = 2
-    if Z == 18: maxn = 3
 
     # Enter recursive loop for HF calculation
     while counter < maxcount:
@@ -553,229 +565,142 @@ def main(Z,lorbit,screenparameter,plotb):
 
         counter += 1
 
-        # Need these for l > 0
-        tempstates = []
-        tempE = []
-        tempn = []
-        templ = []
+        # Calculate the direct and exchange terms, NOT l dependent
+        Dpot = Direct(r,lvalues,states)
 
-        for n in range(0,1):
+        #Epot = Exchange(r,u,lvalues,states)
 
-            # Form matrix to diagonalize
-            for i in range(0,lmax+1):
+        # Form matrix to diagonalize
+        for i in range(0,lmax+1):
+            for j in range(riter):
+                potvaltot[j] = PotTot(r[j], Z, i, me)
+            # Plot the Hartree potential
+            plt.plot(r, potvaltot)
+            plt.plot(r, Dpot)
+            plt.plot(r, Dpot + potvaltot)
+            plt.xlim(0, 10)
+            plt.ylim(-30, 5)
 
-                # Calculate the direct and exchange terms, n, l dependent for modified hartree
-                Dpot = Direct(r, lvalues, nvalues, states, n, i)
-                Epot = Exchange(r, lvalues, states, i)
+            plt.xlabel('Radius ($a_{0}$)')
+            plt.ylabel('Potential Energy (Hartree)')
+            plt.axhline(0, color='black')
+            plt.show()
 
-                for j in range(riter):
-                    potvaltot[j] = PotTot(r[j], Z, i, me)
-                # Plot the Hartree potential
-                plt.plot(r, potvaltot)
-                plt.plot(r, Dpot)
-                plt.plot(r, Dpot + potvaltot)
-                plt.xlim(0, 10)
-                plt.ylim(-30, 30)
+            # Access the correct kinetic and external Hamiltonian using the l value
+            # MUST BE A DEEP COPY
+            # Otherwise the original Hamil will be updated in each iteration
+            HFHamil = copy.deepcopy(Hamil[i])
 
-                plt.xlabel('Radius ($a_{0}$)')
-                plt.ylabel('Potential Energy (Hartree)')
-                plt.axhline(0, color='black')
-                plt.show()
+            # Add direct and exchange terms to Hamiltonian
+            for j in range(0, riter):
+                for n in range(0, riter):
+                    if j == n:
+                        HFHamil[j, n] += Dpot[j]
+                        #print(Dpot[j])
+                    #HFHamil[j,n] -= Epot[j,n]
 
-                # Access the correct kinetic and external Hamiltonian using the l value
-                # MUST BE A DEEP COPY
-                # Otherwise the original Hamil will be updated in each iteration
-                HFHamil = copy.deepcopy(Hamil[i])
+            # Diagonalize the Hamiltonian, might not be symmetric so don't use eigh
+            HFValues, HFVectors = np.linalg.eig(HFHamil)
 
-                # Add direct and exchange terms to Hamiltonian
-                for j in range(0, riter):
-                    for m in range(0, riter):
-                        if j == m:
-                            HFHamil[j, m] += Dpot[j]
-                            #print(Dpot[j])
-                        HFHamil[j,n] -= Epot[j,n]
+            permute = HFValues.argsort()
+            HFValues = HFValues[permute]
+            HFVectors = HFVectors[:, permute]
 
-                # Diagonalize the Hamiltonian, might not be symmetric so don't use eigh
-                HFValues, HFVectors = np.linalg.eig(HFHamil)
+            for i in range(0, riter):
+                normalization_const = np.sqrt(np.trapz(HFVectors.T[i] ** 2, r))
+                HFVectors[:, i] = HFVectors.T[i] / normalization_const
 
-                permute = HFValues.argsort()
-                HFValues = HFValues[permute]
-                HFVectors = HFVectors[:, permute]
+            boundEig = 0
+            # Find number of bound states
+            for j in range(0, len(r)):
+                if HFValues[j] < 0: boundEig += 1
+                if HFValues[j] >= 0: break  # don't waste time once you get into the continuum
 
-                for norm in range(0, riter):
-                    normalization_const = np.sqrt(np.trapz(HFVectors.T[norm] ** 2, r))
-                    HFVectors[:, norm] = HFVectors.T[norm] / normalization_const
+            # Solves for the radial wavefunction Rr, only takes negative eigenvalues
+            boundvals = []
+            boundvec = []
 
-                boundEig = 0
-                # Find number of bound states
-                for j in range(0, len(r)):
-                    if HFValues[j] < 0: boundEig += 1
-                    if HFValues[j] >= 0: break  # don't waste time once you get into the continuum
+            # Assigns the eigenvectors into a radial distribution function array
+            wavecount = 0
+            for j in range(0, boundEig):
+                if HFValues[j] < 0 and HFValues[j] > -1000:
+                    boundvec.append(HFVectors[:, j])
+                    boundvals.append(HFValues[j])
+                    wavecount += 1
+                elif HFValues[j] >= 0:
+                    break
 
-                # Solves for the radial wavefunction Rr, only takes negative eigenvalues
-                boundvals = []
-                boundvec = []
+            boundvec = np.array(boundvec)
+            #boundvec = np.squeeze(boundvec)
 
-                # Assigns the eigenvectors into a radial distribution function array
-                wavecount = 0
-                for j in range(0, boundEig):
-                    if HFValues[j] < 0 and HFValues[j] > -1000:
-                        boundvec.append(HFVectors[:, j])
-                        boundvals.append(HFValues[j])
-                        wavecount += 1
-                    elif HFValues[j] >= 0:
-                        break
+            if wavecount == 0:
+                print('No bound values, something is wrong')
+                sys.exit()
 
-                boundvec = np.array(boundvec)
-                #boundvec = np.squeeze(boundvec)
+            print("Bound HF eigenvalues: ", boundvals)
+            print("Bound HF eigenvectors: ", boundvec)
 
-                if wavecount == 0:
-                    print('No bound values, something is wrong')
-                    sys.exit()
+            plt.axhline(0, color='black', label='_nolegend_')
+            plt.xlabel('Radius ($\AA$)')
+            plt.ylabel('R(r)')
+            plotvect = boundvec[0]
+            plt.plot(r, plotvect)
+            #plotvect = (HFVectors[1])
+            #plt.plot(r, plotvect * plotvect)
+            #plt.xlim(0, 2)
+            plt.legend()
+            plt.show()
 
-                print("Bound HF eigenvalues: ", boundvals)
-                #print("Bound HF eigenvectors: ", boundvec)
+            plt.axhline(0, color='black', label='_nolegend_')
+            plt.xlabel('Radius ($\AA$)')
+            plt.ylabel('|rR(r)|$^2$')
+            plotvect = boundvec[0]
+            plt.plot(r, plotvect * plotvect)
+            #plotvect = (HFVectors[1])
+            #plt.plot(r, plotvect * plotvect)
+            #plt.xlim(0, 2)
+            plt.legend()
+            plt.show()
 
-                plt.axhline(0, color='black', label='_nolegend_')
-                plt.xlabel('Radius (a$_{0}$)')
-                plt.ylabel('R(r)')
-                plotvect = boundvec[0]
-                plt.plot(r, plotvect)
-                #plotvect = (HFVectors[1])
-                #plt.plot(r, plotvect * plotvect)
-                #plt.xlim(0, 2)
-                plt.legend()
-                plt.show()
+            # Print the first few eigenvalues
+            print("HF E 0: ", boundvals[0])
+            #print("HF E 1: ", boundvals[1])
+            #print("HF E 2: ", boundvals[2])
+            #print("HF E 3: ", boundvals[3])
 
-                #plt.axhline(0, color='black', label='_nolegend_')
-                #plt.xlabel('Radius (a$_{0}$)')
-                #plt.ylabel('|rR(r)|$^2$')
-                #plotvect = boundvec[0]
-                #plt.plot(r, plotvect * plotvect)
-                #plotvect = (HFVectors[1])
-                #plt.plot(r, plotvect * plotvect)
-                #plt.xlim(0, 2)
-                #plt.legend()
-                #plt.show()
+            # Only save the valence orbitals as radial wavefunctions
+            if Z == 2 or Z == 1:
+                Radfunc = boundvec[0]
+                HFE[counter] = [boundvals[0]]
+                HFstates[counter] = np.array([Radfunc])
+                HFl[counter] = [0]
+                HFn[counter] = [1]
 
-                # Print the first few eigenvalues
-                #"HF E 0: ", boundvals[0])
-                #print("HF E 1: ", boundvals[1])
-                #print("HF E 2: ", boundvals[2])
-                #print("HF E 3: ", boundvals[3])
-
-                # Only save the valence orbitals as radial wavefunctions
-                if Z == 2 or Z == 1:
-                    Radfunc = boundvec[0]
-                    HFE[counter] = [boundvals[0]]
-                    HFstates[counter] = np.array([Radfunc])
-                    HFl[counter] = [i]
-                    HFn[counter] = [n]
-
-                    print('Iteration ', counter)
-                    print('States: E ', HFE[counter])
-                    print('States: l ', HFl[counter])
-                    print('States: n ', HFn[counter])
-                    #print('Radial funcs: ', HFstates[counter])
-
-                if Z == 10:
-                    # Save s-wave
-                    if i == 0:
-                        tempstates.append(boundvec[0])
-                        tempstates.append(boundvec[1])
-                        tempE.append(boundvals[0])
-                        tempE.append(boundvals[1])
-                        templ.append(0)
-                        templ.append(0)
-                        tempn.append(1)
-                        tempn.append(2)
-
-                        print('Temp Stuff')
-                        print('states: ', tempstates)
-                        print('E: ', tempE)
-                        print('l: ', templ)
-                        print('n: ', tempn)
-                    # Save p-wave
-                    if i == 1:
-                        tempstates.append(boundvec[0])
-                        tempE.append(boundvals[0])
-                        templ.append(1)
-                        tempn.append(2)
-
-                        print('Temp Stuff')
-                        print('states: ', tempstates)
-                        print('E: ', tempE)
-                        print('l: ', templ)
-                        print('n: ', tempn)
-
-        if Z == 10 or Z == 18:
-            tempstates = np.array(tempstates)
-            tempstates = np.squeeze(tempstates)
-
-            HFE[counter] = tempE
-            HFstates[counter] = tempstates
-            HFl[counter] = templ
-            HFn[counter] = tempn
-
-            print('Iteration ', counter)
-            print('States: E ', HFE[counter])
-            print('States: l ', HFl[counter])
-            print('States: n ', HFn[counter])
-            # print('Radial funcs: ', HFstates[counter])
+                print('Iteration ', counter)
+                print('States: E ', HFE[counter])
+                print('States: l ', HFl[counter])
+                print('States: n ', HFn[counter])
+                print('Radial funcs: ', HFstates[counter])
 
     print('Final Arrays')
     energylist = []
     count = []
     c = 0
-    energylist2s = []
-    energylist2p = []
-
-
     for inner in HFE:
         print('iteration ', inner, ' E (H): ', inner[0])
         energylist.append(inner[0])
-        if maxn == 2:
-            energylist2s.append(inner[1])
-            energylist2p.append(inner[2])
         count.append(c)
         c+=1
 
 
     plt.plot(count, energylist)
-    if maxn == 2:
-        plt.plot(count, energylist2s)
-        plt.plot(count, energylist2p)
+
     plt.xlabel('Iteration')
     plt.ylabel('Energy (Hartree)')
     plt.axhline(0, color='black')
     plt.show()
 
-    # Plot the starting states and the final states
-    statecount = 0
-    for inner in HFstates:
-        if statecount == 0 or statecount == len(HFstates) - 1:
-            for i in range(len(inner)):
-                # pick a phase
-                # 1s positive
-                # 2s positive
-                # 2p negative
-                if i == 0:
-                    if statecount == 0: plt.plot(r,np.abs(inner[i]), linestyle='dashed')
-                    if statecount == len(HFstates) - 1: plt.plot(r,np.abs(inner[i]))
-                if i == 1:
-                    if statecount == 0: plt.plot(r,-inner[i], linestyle='dashed')
-                    if statecount == len(HFstates) - 1: plt.plot(r,-inner[i])
-                if i == 2:
-                    if statecount == 0: plt.plot(r,inner[i], linestyle='dashed')
-                    if statecount == len(HFstates) - 1: plt.plot(r,-inner[i])
-        statecount +=1
 
-    plt.xlabel('Radius $a_{0}$')
-    plt.ylabel('rR(r)')
-    plt.axhline(0, color='black')
-    plt.xlim(0, 1)
-    plt.ylim(-2, 3)
-    plt.show()
 
 main(Z, 0, screen, True)
 
