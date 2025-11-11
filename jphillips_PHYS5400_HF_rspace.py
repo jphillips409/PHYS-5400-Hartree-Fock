@@ -57,20 +57,23 @@ plt.rcParams['lines.linewidth'] = 2
 #screen = 0
 
 #Ne
-Z = 10
-Ratm = 10 # angstrom
+#Z = 10
+#Ratm = 10 # angstrom
 #screen = 4.385
-screen = 1
+#screen = 1
 
 #Ar
-#Z = 18
-#Ratm = 15 # angstrom
+Z = 18
+Ratm = 15 # angstrom
 #screen = 3.977
-#screen = 0
+screen = 1
 
 CoulConst = 1 # N^2*m^2/C^2
 
 #General constants
+
+maxcount = 20  # set some max number of iterations for HF
+
 hbar = 1 # keV*A/c
 me = 1  # electron mass in keV/c^2
 #Starting parameters
@@ -468,10 +471,6 @@ def main(Z,lorbit,screenparameter,plotb):
 
         Hamil[i] = tHamil
 
-    # Counter for recursive loop
-    counter = 0
-    maxcount = 15 # set some max number of iterations
-
     # Temp arrays
     TE = []
     Tl = []
@@ -600,6 +599,9 @@ def main(Z,lorbit,screenparameter,plotb):
     if Z == 10: maxn = 2
     if Z == 18: maxn = 3
 
+    # Counter for recursive loop
+    counter = 0
+
     # Enter recursive loop for HF calculation
     while counter < maxcount:
 
@@ -723,18 +725,20 @@ def main(Z,lorbit,screenparameter,plotb):
                         break
                 #boundvec = np.squeeze(boundvec)
 
-                if wavecount == 0:
-                    if (i < 1):
+                # Got to be careful as Ar frequently has unbound states due to numerical instabilities
+                if wavecount == 0 or Z == 18:
+                    if i < 1 and Z < 18:
                         print('No bound values, something is wrong')
                         sys.exit()
+                    elif i < 1 and Z == 18:
+                        boundvec.append(HFVectors[:, wavecount])
+                        boundvec.append(HFVectors[:, wavecount+1])
+                        boundvec.append(HFVectors[:, wavecount+2])
+                        boundvals.append(0)
                     else:
-                        boundvec.append(HFVectors[:, 0])
+                        boundvec.append(HFVectors[:, wavecount])
                         boundvals.append(0)
-                        boundvec.append(HFVectors[:, 1])
-                        boundvals.append(0)
-                        boundvec.append(HFVectors[:, 2])
-                        boundvals.append(0)
-                        boundvec.append(HFVectors[:, 3])
+                        boundvec.append(HFVectors[:, wavecount+1])
                         boundvals.append(0)
 
                 boundvec = np.array(boundvec)
@@ -750,23 +754,6 @@ def main(Z,lorbit,screenparameter,plotb):
                 #plt.xlim(0, 2)
                 plt.legend()
                 plt.show()
-
-                #plt.axhline(0, color='black', label='_nolegend_')
-                #plt.xlabel('Radius (a$_{0}$)')
-                #plt.ylabel('|rR(r)|$^2$')
-                #plotvect = boundvec[0]
-                #plt.plot(r, plotvect * plotvect)
-                #plotvect = (HFVectors[1])
-                #plt.plot(r, plotvect * plotvect)
-                #plt.xlim(0, 2)
-                #plt.legend()
-                #plt.show()
-
-                # Print the first few eigenvalues
-                #"HF E 0: ", boundvals[0])
-                #print("HF E 1: ", boundvals[1])
-                #print("HF E 2: ", boundvals[2])
-                #print("HF E 3: ", boundvals[3])
 
                 # Only save the valence orbitals as radial wavefunctions
                 if Z == 2 or Z == 1:
@@ -802,7 +789,7 @@ def main(Z,lorbit,screenparameter,plotb):
                     #print('States: n ', HFn[counter])
                     #print('Radial funcs: ', HFstates[counter])
 
-                if Z == 10 or Z == 18:
+                if Z == 10:
                     # Save s-wave
                     if i == 0:
                         tempstates.append(boundvec[0])
@@ -829,6 +816,48 @@ def main(Z,lorbit,screenparameter,plotb):
                         templ.append(i)
                         tempn.append(n+1)
                         #temppots.append(avgpot)
+
+                        print('Temp Stuff')
+                        print('states: ', tempstates)
+                        print('E: ', tempE)
+                        print('l: ', templ)
+                        print('n: ', tempn)
+
+                if Z == 18:
+                    # Save s-wave
+                    if i == 0:
+                        tempstates.append(boundvec[0])
+                        tempstates.append(boundvec[1])
+                        tempstates.append(boundvec[2])
+                        tempE.append(boundvals[0])
+                        tempE.append(boundvals[1])
+                        tempE.append(boundvals[2])
+                        templ.append(i)
+                        templ.append(i)
+                        templ.append(i)
+                        tempn.append(1)
+                        tempn.append(2)
+                        tempn.append(3)
+                        # temppots.append(avgpot)
+
+                        print('Temp Stuff')
+                        print('states: ', tempstates)
+                        print('E: ', tempE)
+                        print('l: ', templ)
+                        print('n: ', tempn)
+                    # Save p-wave
+                    if i == 1:
+                        tempstates.append(boundvec[0])
+                        tempstates.append(boundvec[1])
+                        tempE.append(boundvals[0])
+                        tempE.append(boundvals[1])
+                        # tempstates.append(states[2])
+                        # tempE.append(energies[2])
+                        templ.append(i)
+                        templ.append(i)
+                        tempn.append(2)
+                        tempn.append(3)
+                        # temppots.append(avgpot)
 
                         print('Temp Stuff')
                         print('states: ', tempstates)
@@ -888,8 +917,13 @@ def main(Z,lorbit,screenparameter,plotb):
 
     if maxn == 1: plt.plot(count, energylist,label = '1s')
     if maxn == 2:
-        plt.plot(count, energylist2s,label = '2s')
-        if Z > 4: plt.plot(count, energylist2p,label = '2p')
+        if Z <= 4:
+            plt.plot(count, energylist, label='1s')
+            plt.plot(count, energylist2s,label = '2s')
+        else:
+            plt.plot(count, energylist/2, label='1s x0.5')
+            plt.plot(count, energylist2s, label='2s')
+            plt.plot(count, energylist2p,label = '2p')
     if maxn == 3 and Z == 18:
         plt.plot(count, energylist/10,label = '1s x0.1')
         plt.plot(count, energylist2s,label = '2s')
