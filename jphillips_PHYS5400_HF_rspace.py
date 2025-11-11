@@ -57,16 +57,16 @@ plt.rcParams['lines.linewidth'] = 2
 #screen = 0
 
 #Ne
-#Z = 10
-#Ratm = 10 # angstrom
+Z = 10
+Ratm = 10 # angstrom
 #screen = 4.385
-#screen = 0
+screen = 1
 
 #Ar
-Z = 18
-Ratm = 15 # angstrom
+#Z = 18
+#Ratm = 15 # angstrom
 #screen = 3.977
-screen = 0
+#screen = 0
 
 CoulConst = 1 # N^2*m^2/C^2
 
@@ -120,16 +120,18 @@ def ThreeJ(l,lprime,lcoup):
 
     # Only so many values because we go up to l = 1
     # Pre-calculate and access them
-
+    # Need 3J ^ 2
     if l == 0 and lprime == 0 and lcoup == 0: return 1*value
 
-    if l == 1 and lprime == 1 and lcoup == 0: return -np.sqrt(1/3)*value
+    if l == 1 and lprime == 1 and lcoup == 0: return (1/3)*value
 
-    if l == 1 and lprime == 1 and lcoup == 0: return -np.sqrt(1/3)*value
+    if l == 1 and lprime == 0 and lcoup == 1: return (1/3)*value
 
-    if l == 0 and lprime == 1 and lcoup == 0: return -np.sqrt(1/3)*value
+    if l == 0 and lprime == 1 and lcoup == 1: return (1/3)*value
 
-    if l == 1 and lprime == 1 and lcoup == 2: return -np.sqrt(2/15)*value
+    if l == 0 and lprime == 1 and lcoup == 0: return (1/3)*value
+
+    if l == 1 and lprime == 1 and lcoup == 2: return (2/15)*value
 
     # If here but no value, print failure and abort
     print('No valid 3J value for : ', l, ' ', lcoup, ' ', lprime)
@@ -315,7 +317,7 @@ def Auxiliary(Z,lorbit,screenparameter,plotb):
 def Direct(radarr,larr,narr, wavearr, n, l):
 
     # Switch for modified
-    modified = True
+    modified = False
     print('Calc for n = ', n, ' and l = ',l)
     print('Direct wave')
     print(wavearr)
@@ -359,7 +361,7 @@ def Exchange(radarr,larr,wavearr,lHF):
 
     # Form a matrix of r x r
     epot = np.zeros((len(radarr),len(radarr)))
-
+    DeltR = radarr[2]-radarr[1]
     # Iterate over r
     for i in range(0,len(radarr)):
 
@@ -384,8 +386,8 @@ def Exchange(radarr,larr,wavearr,lHF):
                     if C == 0:
                         # Do not contribute to term if 0
                         continue
-
-                    epot[i,j] += wavepicked[i]*((min(radarr[i],radarr[j])**lcoup)/(max(radarr[i],radarr[j])**(lcoup+1)))*C*wavepicked[j]
+                    #Need a DeltR?
+                    epot[i,j] += DeltR*wavepicked[i]*((min(radarr[i],radarr[j])**lcoup)/(max(radarr[i],radarr[j])**(lcoup+1)))*C*wavepicked[j]
 
     return epot
 
@@ -468,7 +470,7 @@ def main(Z,lorbit,screenparameter,plotb):
 
     # Counter for recursive loop
     counter = 0
-    maxcount = 10 # set some max number of iterations
+    maxcount = 15 # set some max number of iterations
 
     # Temp arrays
     TE = []
@@ -543,14 +545,25 @@ def main(Z,lorbit,screenparameter,plotb):
                 Tstates.append(auxstates[i])
                 Tpots.append(potentials[i])
 
+    # Make a diagonal matrix for the potential
+    Tpots = np.array(Tpots)
+    ogpot = np.zeros((riter,riter))
+    Tmatrix = []
+    for inner in Tpots:
+        for i in range(riter):
+            for j in range(riter):
+                if i == j: ogpot[i,j] = inner[i]
+        Tmatrix.append(ogpot)
+    Tmatrix = np.array(Tmatrix)
+    #Tmatrix = np.squeeze(Tmatrix)
+
     HFE[0] = TE
     HFl[0] = Tl
     HFn[0] = Tn
     Tstates = np.array(Tstates)
     #Tstates = np.squeeze(Tstates) # Not sure if I need this
     HFstates[0] = Tstates
-    Tpots = np.array(Tpots)
-    HFpots[0] = Tpots
+    HFpots[0] = Tmatrix
 
     # Reorder arrays to follow n,l scheme. Only for Z > 10
     # Manually do it for argon
@@ -595,7 +608,7 @@ def main(Z,lorbit,screenparameter,plotb):
         lvalues = HFl[counter]
         nvalues = HFn[counter]
         states = HFstates[counter]
-        pots = HFpots[counter]
+        #pots = HFpots[counter]
 
         print('input states: ', states)
 
@@ -608,20 +621,20 @@ def main(Z,lorbit,screenparameter,plotb):
         templ = []
         temppots = []
 
-        for n in range(1,maxn+1):
+        for n in range(1,2):
 
             # Form matrix to diagonalize
             maxl = 0
-            if Z > 4 and n > 1: maxl = 1
+            if Z > 4: maxl = 1
 
             for i in range(0,maxl+1):
 
                 # Select potential based on n,l
                 potindx = 0
                 for j in range(len(nvalues)):
-                    if nvalues[j] == n and lvalues[j] == i: potindx = j
+                    if lvalues[j] == i: potindx = j
 
-                prvpot = pots[potindx]
+                #prvpot = copy.deepcopy(pots[potindx])
                 potvaltot = np.zeros(riter)
                 # fills radius and potential value arrays
                 for j in range(riter):
@@ -629,18 +642,18 @@ def main(Z,lorbit,screenparameter,plotb):
 
                 # Calculate the direct and exchange terms, n, l dependent for modified hartree
                 Dpot = Direct(r, lvalues, nvalues, states, n, i)
-                #Epot = Exchange(r, lvalues, states, i)
-
-                potvaltot = potvaltot + Dpot
+                #potvaltot = potvaltot + Dpot
+                addedpot = potvaltot + Dpot
 
                 # Mix with counter - 1 potential, give mixing parameter
-                mix = 0.5
-                avgpot = (1 - mix)*prvpot + (mix)*potvaltot
-                print(avgpot)
+                #avgpot = (1 - mix)*prvpot + (mix)*potvaltot
+                #print(avgpot)
                 # Plot the Hartree potential
-                plt.plot(r, potvaltot,label='New Potential')
-                plt.plot(r, Dpot,label='Direct Potential')
-                plt.plot(r, avgpot,label='Averaged Potential')
+                plt.plot(r, potvaltot,label='Original Pot')
+                plt.plot(r, Dpot,label='Direct Pot')
+                plt.plot(r, addedpot,label='New Potential')
+
+                #plt.plot(r, avgpot,label='Averaged Potential')
                 plt.xlim(0, 10)
                 plt.ylim(-30, 30)
 
@@ -650,6 +663,17 @@ def main(Z,lorbit,screenparameter,plotb):
                 plt.legend()
                 plt.show()
 
+                Epot = Exchange(r, lvalues, states, i)
+
+                # Generate new r x r matrix with pot, direct, and exchange
+                # Mix this matrix with the [i-1] total potential matrix
+                #avgpot = np.zeros((riter, riter))
+                mix = 1
+                #for j in range(0, riter):
+                    #for m in range(0, riter):
+                        #if j == m: avgpot[j,m] = (1-mix)*prvpot[j,m] + mix*(potvaltot[j] - Epot[j,m])
+                        #else: avgpot[j,m] = (1-mix)*prvpot[j,m] - mix*Epot[j,m]
+
                 # Access the correct kinetic and external Hamiltonian using the l value
                 # MUST BE A DEEP COPY
                 # Otherwise the original Hamil will be updated in each iteration
@@ -658,10 +682,8 @@ def main(Z,lorbit,screenparameter,plotb):
                 # Add direct and exchange terms to Hamiltonian
                 for j in range(0, riter):
                     for m in range(0, riter):
-                        if j == m:
-                            HFHamil[j, m] += avgpot[j]
-                            #print(Dpot[j])
-                        #HFHamil[j,n] -= Epot[j,n]
+                        if j == m: HFHamil[j,m] += addedpot[j]
+                        HFHamil[j,m] -= Epot[j,m]
 
                 # Diagonalize the Hamiltonian, might not be symmetric so don't use eigh
                 HFValues, HFVectors = np.linalg.eig(HFHamil)
@@ -673,6 +695,12 @@ def main(Z,lorbit,screenparameter,plotb):
                 for norm in range(0, riter):
                     normalization_const = np.sqrt(np.trapz(HFVectors.T[norm] ** 2, r))
                     HFVectors[:, norm] = HFVectors.T[norm] / normalization_const
+
+                sum = 0
+                vector = HFVectors[:, 0]
+                for inorm in range(riter):
+                    sum += rstep * vector[inorm] * vector[inorm]
+                print('Vector sum u**2: ', sum)
 
                 boundEig = 0
                 # Find number of bound states
@@ -693,13 +721,23 @@ def main(Z,lorbit,screenparameter,plotb):
                         wavecount += 1
                     elif HFValues[j] >= 0:
                         break
-
-                boundvec = np.array(boundvec)
                 #boundvec = np.squeeze(boundvec)
 
                 if wavecount == 0:
-                    print('No bound values, something is wrong')
-                    sys.exit()
+                    if (i < 1):
+                        print('No bound values, something is wrong')
+                        sys.exit()
+                    else:
+                        boundvec.append(HFVectors[:, 0])
+                        boundvals.append(0)
+                        boundvec.append(HFVectors[:, 1])
+                        boundvals.append(0)
+                        boundvec.append(HFVectors[:, 2])
+                        boundvals.append(0)
+                        boundvec.append(HFVectors[:, 3])
+                        boundvals.append(0)
+
+                boundvec = np.array(boundvec)
 
                 print("Bound HF eigenvalues: ", boundvals)
                 #print("Bound HF eigenvectors: ", boundvec)
@@ -707,10 +745,8 @@ def main(Z,lorbit,screenparameter,plotb):
                 plt.axhline(0, color='black', label='_nolegend_')
                 plt.xlabel('Radius (a$_{0}$)')
                 plt.ylabel('R(r)')
-                plotvect = boundvec[0]
-                plt.plot(r, plotvect)
-                #plotvect = (HFVectors[1])
-                #plt.plot(r, plotvect * plotvect)
+                for w in range(len(boundvec)):
+                    plt.plot(r, boundvec[w],label=str(w))
                 #plt.xlim(0, 2)
                 plt.legend()
                 plt.show()
@@ -739,7 +775,7 @@ def main(Z,lorbit,screenparameter,plotb):
                     HFstates[counter] = np.array([Radfunc])
                     HFl[counter] = [i]
                     HFn[counter] = [n]
-                    HFpots[counter] = np.array([avgpot])
+                    #HFpots[counter] = np.array([avgpot])
 
                     print('Iteration ', counter)
                     print('States: E ', HFE[counter])
@@ -750,11 +786,15 @@ def main(Z,lorbit,screenparameter,plotb):
 
                 # Only save the valence orbitals as radial wavefunctions
                 if Z == 4:
-                    tempstates.append(boundvec[n-1])
-                    tempE.append(boundvals[n-1])
+                    tempstates.append(boundvec[0])
+                    tempstates.append(boundvec[1])
+                    tempE.append(boundvals[0])
+                    tempE.append(boundvals[1])
+                    templ.append(i)
                     templ.append(i)
                     tempn.append(n)
-                    temppots.append(avgpot)
+                    tempn.append(n+1)
+                    #temppots.append(avgpot)
 
                     #print('Iteration ', counter)
                     #print('States: E ', HFE[counter])
@@ -765,13 +805,15 @@ def main(Z,lorbit,screenparameter,plotb):
                 if Z == 10 or Z == 18:
                     # Save s-wave
                     if i == 0:
-                        #tempstates.append(boundvec[n - 1])
-                        #tempE.append(boundvals[n - 1])
-                        tempstates.append(boundvec[n - 1])
-                        tempE.append(boundvals[n - 1])
+                        tempstates.append(boundvec[0])
+                        tempstates.append(boundvec[1])
+                        tempE.append(boundvals[0])
+                        tempE.append(boundvals[1])
+                        templ.append(i)
                         templ.append(i)
                         tempn.append(n)
-                        temppots.append(avgpot)
+                        tempn.append(n + 1)
+                        #temppots.append(avgpot)
 
                         print('Temp Stuff')
                         print('states: ', tempstates)
@@ -780,13 +822,13 @@ def main(Z,lorbit,screenparameter,plotb):
                         print('n: ', tempn)
                     # Save p-wave
                     if i == 1:
-                        tempstates.append(boundvec[n - 2])
-                        tempE.append(boundvals[n - 2])
+                        tempstates.append(boundvec[0])
+                        tempE.append(boundvals[0])
                         #tempstates.append(states[2])
                         #tempE.append(energies[2])
                         templ.append(i)
-                        tempn.append(n)
-                        temppots.append(avgpot)
+                        tempn.append(n+1)
+                        #temppots.append(avgpot)
 
                         print('Temp Stuff')
                         print('states: ', tempstates)
