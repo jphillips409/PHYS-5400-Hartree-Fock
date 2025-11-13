@@ -60,13 +60,13 @@ plt.rcParams['lines.linewidth'] = 2
 #Z = 10
 #Ratm = 10 # angstrom
 #screen = 4.385
-#screen = 1
+#screen = 2
 
 #Ar
 Z = 18
 Ratm = 15 # angstrom
 #screen = 3.977
-screen = 1
+screen = 2
 
 CoulConst = 1 # N^2*m^2/C^2
 
@@ -564,26 +564,6 @@ def main(Z,lorbit,screenparameter,plotb):
     HFstates[0] = Tstates
     HFpots[0] = Tmatrix
 
-    # Reorder arrays to follow n,l scheme. Only for Z > 10
-    # Manually do it for argon
-    if Z == 18:
-        rindx = np.array([0,1,3,2,4])
-        temp = HFE[0]
-        temp = np.array(temp)
-        HFE[0] = temp[rindx]
-        temp = HFn[0]
-        temp = np.array(temp)
-        HFn[0] = temp[rindx]
-        temp = HFl[0]
-        temp = np.array(temp)
-        HFl[0] = temp[rindx]
-        temp = HFstates[0]
-        temp = np.array(temp)
-        HFstates[0] = temp[rindx]
-        temp = HFpots[0]
-        temp = np.array(temp)
-        HFpots[0] = temp[rindx]
-
     print('HF Input Values')
     print(HFE[0])
     print(HFl[0])
@@ -935,6 +915,7 @@ def main(Z,lorbit,screenparameter,plotb):
     plt.ylabel('Energy (Hartree)')
     plt.axhline(0, color='black')
     plt.legend()
+    plt.savefig('Convergence.pdf')
     plt.show()
 
     # Plot the starting states and the final states
@@ -961,6 +942,7 @@ def main(Z,lorbit,screenparameter,plotb):
     plt.xlim(0, 1)
     plt.ylim(-3.5, 3.5)
     plt.legend()
+    plt.savefig('FirstandLastWave.pdf')
     plt.show()
 
 main(Z, 0, screen, True)
